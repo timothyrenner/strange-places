@@ -12,7 +12,11 @@ from shapely.ops import cascaded_union
 NON_CONUS_STATES = {'VI', 'AK', 'HI', 'PR', 'GU', 'MP', 'AS'}
 
 COLORS = {
-    "green": "#1cff2b"
+    "green": "#1cff2b",
+    "blue": "#1c89ff",
+    "pink": "#ff42fb",
+    "orange": "#ff8c00",
+    "red": "#ff007b"
 }
 
 def polygon_theme(theme_name):
@@ -77,7 +81,7 @@ def point_theme(theme_name):
 )
 @click.option(
     "--point-color",
-    type=click.Choice(["green"]),
+    type=click.Choice(list(COLORS.keys())),
     default="green"
 )
 def main(
@@ -138,9 +142,9 @@ def main(
         strange_places.latitude,
         "o",
         markeredgecolor=COLORS[point_color],
-        markeredgewidth=0.2,
+        markeredgewidth=0.3,
         markersize=1.05,
-        alpha=0.75,
+        alpha=1.0,
         transform=ccrs.PlateCarree(),
         **point_theme(plot_theme)
     )
