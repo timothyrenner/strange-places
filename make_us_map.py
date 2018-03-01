@@ -19,6 +19,7 @@ COLORS = {
     "red": "#ff007b"
 }
 
+
 def polygon_theme(theme_name):
     assert theme_name in {"dark", "light"}
 
@@ -45,6 +46,83 @@ def point_theme(theme_name):
         return {
             "markerfacecolor": "black"
         }
+
+
+def make_map(
+    polygons, # Polygon or list of polygons.
+    coordinates, # Nx2 numpy array.
+    theme="dark",
+    point_color="green",
+    point_size=1.05,
+    plot_title="Strange Places",
+    plot_height=12,
+    plot_width=16
+):
+    # Put the polygons into a list if they aren't already in one.
+    polygon_list = polygons if isinstance(polygons, list) else [polygons]
+
+    # Obtain the bounds.
+    polygon_bounds = cascaded_union(
+        [polygon.envelope for polygon in polygons]
+    ).bounds
+
+    # Isolate the points in the bounds.
+    coordinates_in_bounds = (
+        coordinates[:,0] > polygon_bounds[0]
+    ) & (
+        coordinates[:,0] < polygon_bounds[2]
+    ) & (
+        coordinates[:,1] > polygon_bounds[1]
+    ) & (
+        coordinates[:,1] < polygon_bounds[3]
+    )
+
+    # Define the projection for the map.
+    projection = ccrs.AlbersEqualArea(
+        # Centroid of the bounding box of all the polygons.
+        central_longitude = (polygon_bounds[0] + polygon_bounds[2])/2,
+        central_latitude = (polygon_bounds[1] + polygon_bounds[3])/2
+    )
+
+    fig = plt.figure(figsize=(plot_width, plot_height))
+    ax = plt.axes(projection=projection)
+
+    # Add each polygon.
+    for polygon in polygon_list:
+        ax.add_feature(
+            cfeature.ShapelyFeature(polygon, ccrs.PlateCarree()),
+            linewidth=0.225,
+            **polygon_theme(theme)
+        )
+
+    # Add the coordinates.
+    ax.plot(
+        coordinates[:,0],
+        coordinates[:,1],
+        "o",
+        markeredgecolor=COLORS[point_color],
+        markeredgewidth=0.3,
+        markersize=point_size,
+        alpha=1.0,
+        transform=ccrs.PlateCarree(),
+        **point_theme(theme)
+    )
+
+    # Set the extents of the plot.
+    ax.set_extent([
+        polygon_bounds[0],
+        polygon_bounds[2],
+        polygon_bounds[1],
+        polygon_bounds[3]
+    ], ccrs.PlateCarree())
+
+    ax.set_title(plot_title)
+
+    # Make the background of the map transparent.
+    ax.outline_patch.set_visible(False)
+    ax.background_patch.set_visible(False)
+
+    return fig,ax
 
 
 @click.command()
@@ -84,6 +162,11 @@ def point_theme(theme_name):
     type=click.Choice(list(COLORS.keys())),
     default="green"
 )
+@click.option(
+    "--point-size",
+    type=float,
+    default=1.05
+)
 def main(
     data_file,
     output_file,
@@ -92,76 +175,31 @@ def main(
     plot_width,
     plot_height,
     plot_theme,
-    point_color
+    point_color,
+    point_size
 ):
 
     # Read in the USA data.
     usa_reader = shpreader.Reader(us_shapefile)
     states = [
-        state for state in usa_reader.records()
+        state.geometry for state in usa_reader.records()
         if state.attributes['STUSPS'] not in NON_CONUS_STATES
     ]
 
-    # Merge the states into a single bounding box.
-    usa_bounds = cascaded_union(
-        [state.geometry.envelope for state in states]
-    ).bounds
-
     # Read the data in and isolate the points to those that fall within the
     # CONUS bounding box.
-    strange_places = pd.read_csv(data_file).query(
-        "(longitude > @usa_bounds[0]) and "
-        "(longitude < @usa_bounds[2]) and "
-        "(latitude > @usa_bounds[1]) and "
-        "(latitude < @usa_bounds[3])"
+    strange_places = pd.read_csv(data_file).dropna()
+
+    fig,ax = make_map(
+        states,
+        strange_places[['longitude','latitude']].values,
+        theme=plot_theme,
+        point_color=point_color,
+        point_size=point_size,
+        plot_title=plot_title,
+        plot_height=plot_height,
+        plot_width=plot_width
     )
-
-    # Prepare a cartopy projection for the plot.
-    proj = ccrs.AlbersEqualArea(
-        # Centering the projection on the bounding box centroid is close
-        # enough for this purpose.
-        central_longitude=(usa_bounds[0] + usa_bounds[2])/2,
-        central_latitude=(usa_bounds[1] + usa_bounds[3])/2
-    )
-
-    fig = plt.figure(figsize=(plot_width,plot_height))
-    ax = plt.axes(projection=proj)
-
-    # Now add the states.
-    for state in states:
-        ax.add_feature(
-            cfeature.ShapelyFeature(state.geometry, ccrs.PlateCarree()),
-            linewidth=0.225,
-            # Extract the theme based on the plot theme arg.
-            **polygon_theme(plot_theme)
-        )
-
-    # Add the strange places.
-    ax.plot(
-        strange_places.longitude,
-        strange_places.latitude,
-        "o",
-        markeredgecolor=COLORS[point_color],
-        markeredgewidth=0.3,
-        markersize=1.05,
-        alpha=1.0,
-        transform=ccrs.PlateCarree(),
-        **point_theme(plot_theme)
-    )
-
-    # Now format the plot.
-    ax.set_extent([
-        usa_bounds[0],
-        usa_bounds[2],
-        usa_bounds[1],
-        usa_bounds[3]
-    ], ccrs.PlateCarree())
-
-    ax.set_title(plot_title)
-
-    # Make the background of the map transparent.
-    ax.outline_patch.set_visible(False)
-    ax.background_patch.set_visible(False)
 
     # Save the figure.
     fig.savefig(output_file, transparent=True)
