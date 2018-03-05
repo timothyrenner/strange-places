@@ -130,7 +130,7 @@ def make_map(
 @click.option(
     "--output-file", "-o",
     type=str,
-    default='strange_places.png'
+    default='strange_places'
 )
 @click.option(
     '--us-shapefile',
@@ -167,6 +167,10 @@ def make_map(
     type=float,
     default=1.05
 )
+@click.option(
+    "--high-quality/--low-quality",
+    default=False
+)
 def main(
     data_file,
     output_file,
@@ -176,7 +180,8 @@ def main(
     plot_height,
     plot_theme,
     point_color,
-    point_size
+    point_size,
+    high_quality
 ):
 
     # Read in the USA data.
@@ -202,7 +207,18 @@ def main(
     )
 
     # Save the figure.
-    fig.savefig(output_file, transparent=True)
+    if high_quality:
+        fig.savefig(
+            "{}.svg".format(output_file),
+            transparent=True,
+            dpi=1200
+        )
+    else:
+        fig.savefig(
+            "{}.png".format(output_file),
+            transparent=True,
+            dpi=300
+        )
 
 
 if __name__ == "__main__":
