@@ -68,15 +68,23 @@ def main(
     # Read in the USA data.
     usa_reader = shpreader.Reader(us_shapefile)
 
-    states = [
-        state.geometry for state in usa_reader.records()
-        if state.attributes['STUSPS'] not in NON_CONUS_STATES
-    ]
+    states = []
+    alaska = None
+    hawaii = None
+    for state in usa_reader.records():
+        if state.attributes['STUSPS'] not in NON_CONUS_STATES:
+            states.append(state.geometry)
+        elif state.attributes['STUSPS'] == 'AK':
+            alaska = state.geometry
+        elif state.attributes['STUSPS'] == 'HI':
+            hawaii = state.geometry
 
     bigfoot = pd.read_csv(data_file).dropna()
 
     fig,ax = make_map(
         states,
+        alaska,
+        hawaii,
         bigfoot[["longitude", "latitude"]].values,
         plot_height=plot_height,
         plot_width=plot_width,
